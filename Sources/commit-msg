@@ -1,0 +1,78 @@
+#!/bin/bash
+
+# Define the branch naming convention and JIRA ID patterns
+valid_prefixes="feature|hotfix|release|chore|bugfix|sync"
+jira_id_pattern="[A-Za-z0-9]{1,8}-[0-9]{1,9}"  # Matches up to 8 letters, a dash, and up to 9 numbers
+
+# Get the branch name
+branch_name=$(git rev-parse --abbrev-ref HEAD)
+
+# Check if on `main` or `master` branch
+if [[ "$branch_name" == "main" || "$branch_name" == "master" ]]; then
+  echo "⛔️ ❌ Error: You cannot commit changes on the 'main' or 'master' branch. ❌"
+  exit 1
+fi
+
+# Check if the branch is already tracked by a remote
+if git rev-parse --verify --quiet "origin/$branch_name" > /dev/null; then
+  echo "🔄 Branch '$branch_name' has a remote. Skipping all validation."
+  exit 0
+fi
+
+
+# Validate branch naming convention
+if [[ ! "$branch_name" =~ ^($valid_prefixes)/$jira_id_pattern-[a-zA-Z0-9_-]+$ ]]; then
+  echo "⛔️ ‼️ Error: Your branch is not correctly named. It should follow the format: <prefix>/JIRA-ID-DESCRIPTION "
+  echo "  🧑‍💻 feature"
+  echo "  🔥 hotfix "
+  echo "  🚀 release"
+  echo "  💪 chore"
+  echo "  🪲 bugfix"
+  echo "  🔄 sync"
+  echo -e "✔️ Example branch name: feature/ABC-123-newFeature \n "
+  echo "❌ Your commit is not succesfull, please do the appropiate changes suggested above and try to commit again ❌"
+  exit 1
+fi
+
+# Extract the JIRA ID from the branch name
+jira_id=$(echo "$branch_name" | grep -oE "$jira_id_pattern")
+
+
+# Check if the JIRA ID was correctly extracted (should always pass if branch_naming_convention is met)
+if [[ -z "$jira_id" ]]; then
+  echo -e "⛔️ ‼️ Error: Your branch name does not have a valid JIRA ID. Please rename your branch.\n"
+  echo "❌ Your commit is not succesfull, please do the appropiate changes suggested above and try to commit again ❌"
+
+  exit 1
+fi
+
+# Path to the commit message file
+commit_msg_file=$(git rev-parse --git-path COMMIT_EDITMSG)
+
+# Read the commit message from the file
+commit_msg=$(cat "$commit_msg_file")
+
+# Trim leading and trailing spaces from the commit message
+commit_msg=$(echo "$commit_msg" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+# 1. Check if the commit message follows the correct format (JIRA-ID : Description)
+if [[ ! "$commit_msg" =~ ^$jira_id\ :\ .+ ]]; then
+  echo "⛔️ ‼️ Error: Your commit message is not correctly formatted."
+  echo -e "⛔️ ‼️ It should start with the JIRA ID and Follow the format \n👌 '$jira_id : DESCRIPTION' \n"
+  echo -e "👍 Example: '$jira_id : Implement feature' \n"
+  echo "❌ Your commit is not succesfull, please do the appropiate changes suggested above and try to commit again ❌"
+  exit 1
+fi
+
+# Extract the JIRA ID from the commit message and compare with branch JIRA ID
+commit_jira_id=$(echo "$commit_msg" | grep -oE "$jira_id_pattern")
+
+if [[ "$commit_jira_id" != "$jira_id" ]]; then
+  echo "⛔️ ‼️ Error: Commit message JIRA ID ('$commit_jira_id') does not match the branch name JIRA ID ('$jira_id')."
+  echo "⛔️ ‼️ Please ensure the JIRA IDs match."
+  exit 1
+fi
+
+# If all checks pass, allow the commit to proceed
+echo "✅ ‼️ Succesfully commited "
+exit 0

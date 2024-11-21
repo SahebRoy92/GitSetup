@@ -1,0 +1,81 @@
+#!/bin/bash
+
+BRANCH_NAME=$(git symbolic-ref --short HEAD)
+VALID_PREFIXES=("feature" "hotfix" "release" "chore" "bugfix" "sync" "test")
+JIRA_TICKET_REGEX="^[A-Za-z]{1,8}-[0-9]{1,9}$"
+
+# Check if we are on a remote branch (i.e., branch name starts with "origin/")
+if [[ "$BRANCH_NAME" == origin/* ]]; then
+  echo "⏩️ Skipping branch validation because the current branch is a remote branch."
+  echo "⚠️ However, errors related to naming convention were"
+  exit 0
+fi
+
+# Check if we are on `main` or `master`, and if so, skip the validation
+if [[ "$BRANCH_NAME" == "main" || "$BRANCH_NAME" == "master" ]]; then
+  echo "⏩️ Skipping branch validation because the current branch is $BRANCH_NAME."
+  exit 0
+fi
+
+# Function to check if the branch base is valid
+is_valid_prefix() {
+  for prefix in "${VALID_PREFIXES[@]}"; do
+    if [[ $BRANCH_NAME == $prefix/* ]]; then
+      return 0 
+    fi
+  done
+  return 1 #
+}
+
+# Function to check if the Jira ticket ID is valid
+has_valid_jira_ticket() {
+  local ticket_id=$(echo $BRANCH_NAME | cut -d'/' -f2 | cut -d'-' -f1-2)
+  
+
+  if [[ $ticket_id =~ $JIRA_TICKET_REGEX ]]; then
+    return 0
+  else
+    return 1 
+  fi
+}
+
+# Check if the branch name follows the naming convention
+if ! is_valid_prefix; then
+  echo -e "❌ ERROR: Branch name is missing a valid prefix. It should start with one of the following:" 
+  echo "  🧑‍💻 feature"
+  echo "  🔥 hotfix "
+  echo "  🚀 release"
+  echo "  💪 chore"
+  echo "  🪲 bugfix"
+  echo "  🧪 test"
+  echo -e "  🔄 sync \n"
+  echo "Example of a valid branch: feature/ABC-123-MyFeature"
+  echo "🚨 ⚠️ Warining: You are in the checked out branch, that you created or switched, Fix the branch name so that you can proceed with commits and push on this branch"
+
+
+  exit 1
+fi
+
+# Check if the branch contains a valid Jira ticket ID
+if ! has_valid_jira_ticket; then
+  echo "ERROR: Branch name is missing a valid Jira ticket ID."
+  echo -e "Example of a valid branch: feature/ABC-123-MyFeature \n"
+  echo "🚨 ⚠️ Warining: You are in the checked out branch, that you created or switched, Fix the branch name so that you can proceed with commits and push on this branch"
+
+  exit 1
+fi
+
+# Check if the description part is missing
+DESCRIPTION_PART=$(echo $BRANCH_NAME | cut -d'-' -f3-)
+if [[ -z "$DESCRIPTION_PART" ]]; then
+  echo "❌ ERROR: Branch name is missing a description. It should contain a description after the Jira ticket ID."
+  echo -e "👍 Example of a valid branch: feature/ABC-123-MyFeature \n"
+  echo "🚨 ⚠️ Warining: You are in the checked out branch, that you created or switched, Fix the branch name so that you can proceed with commits and push on this branch"
+
+  exit 1
+fi
+
+echo "✅ Branch name '$BRANCH_NAME' is valid."
+
+# Exit successfully
+exit 0
